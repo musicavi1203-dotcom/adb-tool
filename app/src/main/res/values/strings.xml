@@ -1,10 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">ADB Tool</string>
-    <string name="status_no_device">אין מכשיר USB מחובר</string>
-    <string name="status_device_found">נמצא מכשיר USB</string>
-    <string name="status_adb_pending">חיבור ADB יתווסף בשלב הבא</string>
-    <string name="btn_refresh">רענן</string>
+    <string name="status_no_device">אין מכשיר מחובר</string>
+    <string name="status_connecting">מתחבר. אם מופיע אישור ניפוי USB במכשיר היעד, אשר אותו</string>
+    <string name="status_connected">מחובר</string>
+    <string name="label_model">דגם</string>
+    <string name="label_android">אנדרואיד</string>
+    <string name="label_chipset">שבב</string>
+    <string name="label_build">מספר בנייה</string>
+    <string name="btn_connect">התחבר</string>
     <string name="section_reboot">הפעלה מחדש</string>
     <string name="btn_system">מערכת</string>
     <string name="btn_recovery">Recovery</string>
@@ -18,5 +22,8 @@
     <string name="btn_confirm">אישור</string>
     <string name="btn_cancel">ביטול</string>
     <string name="reboot_sent">הפקודה נשלחה</string>
-    <string name="err_not_connected">אין חיבור ADB פעיל. החיבור יתווסף בשלב הבא</string>
+    <string name="err_not_connected">אין חיבור ADB פעיל. לחץ התחבר</string>
+    <string name="err_no_adb_device">לא נמצא מכשיר ADB. ודא שכבל ה-OTG מחובר ושניפוי USB פעיל במכשיר היעד</string>
+    <string name="err_permission">לא ניתנה הרשאת USB</string>
+    <string name="err_adb">שגיאת ADB</string>
 </resources>

@@ -21,11 +21,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -34,7 +35,7 @@ class MainActivity : ComponentActivity() {
             AdbToolTheme {
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                     Surface(modifier = Modifier.fillMaxSize()) {
-                        MainScreen(AdbController(applicationContext))
+                        MainScreen()
                     }
                 }
             }
@@ -43,9 +44,14 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun MainScreen(adb: AdbController) {
+fun MainScreen() {
     val ctx = LocalContext.current
-    var deviceCount by remember { mutableIntStateOf(adb.attachedUsbDeviceCount()) }
+    val adb = remember { AdbController(ctx.applicationContext) }
+    val scope = rememberCoroutineScope()
+
+    var info by remember { mutableStateOf<DeviceInfo?>(null) }
+    var status by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
     var pending by remember { mutableStateOf<RebootTarget?>(null) }
     var command by remember { mutableStateOf("") }
     var output by remember { mutableStateOf("") }
@@ -70,31 +76,46 @@ fun MainScreen(adb: AdbController) {
             fontWeight = FontWeight.Bold
         )
 
-        // כרטיס סטטוס
+        // כרטיס סטטוס והתחברות
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(24.dp)
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text(
-                    text = if (deviceCount > 0) {
-                        stringResource(R.string.status_device_found)
-                    } else {
-                        stringResource(R.string.status_no_device)
-                    },
+                    text = status ?: stringResource(R.string.status_no_device),
                     style = MaterialTheme.typography.titleMedium
                 )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = stringResource(R.string.status_adb_pending),
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                info?.let { d ->
+                    Spacer(Modifier.height(8.dp))
+                    InfoLine(stringResource(R.string.label_model), d.model)
+                    InfoLine(stringResource(R.string.label_android), d.android)
+                    InfoLine(stringResource(R.string.label_chipset), d.chipset)
+                    InfoLine(stringResource(R.string.label_build), d.build)
+                }
                 Spacer(Modifier.height(12.dp))
                 OutlinedButton(
-                    onClick = { deviceCount = adb.attachedUsbDeviceCount() },
+                    onClick = {
+                        busy = true
+                        status = ctx.getString(R.string.status_connecting)
+                        scope.launch {
+                            val result = adb.connect()
+                            result
+                                .onSuccess {
+                                    info = it
+                                    status = ctx.getString(R.string.status_connected)
+                                }
+                                .onFailure {
+                                    info = null
+                                    status = it.message ?: ctx.getString(R.string.err_adb)
+                                }
+                            busy = false
+                        }
+                    },
+                    enabled = !busy,
                     shape = RoundedCornerShape(50)
                 ) {
-                    Text(stringResource(R.string.btn_refresh))
+                    Text(stringResource(R.string.btn_connect))
                 }
             }
         }
@@ -114,6 +135,7 @@ fun MainScreen(adb: AdbController) {
                             target == RebootTarget.FASTBOOT
                     Button(
                         onClick = { pending = target },
+                        enabled = info != null,
                         modifier = Modifier
                             .weight(1f)
                             .height(52.dp),
@@ -147,12 +169,13 @@ fun MainScreen(adb: AdbController) {
         )
         Button(
             onClick = {
-                output = adb.runShell(command).fold(
-                    { it },
-                    { it.message ?: "" }
-                )
+                scope.launch {
+                    adb.runShell(command)
+                        .onSuccess { output = it }
+                        .onFailure { output = it.message ?: "" }
+                }
             },
-            enabled = command.isNotBlank(),
+            enabled = info != null && command.isNotBlank(),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(52.dp),
@@ -184,11 +207,16 @@ fun MainScreen(adb: AdbController) {
             text = { Text(stringResource(R.string.confirm_body)) },
             confirmButton = {
                 TextButton(onClick = {
-                    output = adb.reboot(target).fold(
-                        { ctx.getString(R.string.reboot_sent) },
-                        { it.message ?: "" }
-                    )
                     pending = null
+                    scope.launch {
+                        adb.reboot(target)
+                            .onSuccess {
+                                output = ctx.getString(R.string.reboot_sent)
+                                info = null
+                                status = null
+                            }
+                            .onFailure { output = it.message ?: "" }
+                    }
                 }) {
                     Text(stringResource(R.string.btn_confirm))
                 }
@@ -200,4 +228,12 @@ fun MainScreen(adb: AdbController) {
             }
         )
     }
+}
+
+@Composable
+private fun InfoLine(label: String, value: String) {
+    Text(
+        text = "$label: $value",
+        style = MaterialTheme.typography.bodyMedium
+    )
 }
