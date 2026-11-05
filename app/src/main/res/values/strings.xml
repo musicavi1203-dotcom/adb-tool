@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ADB Tool</string>
+    <string name="status_no_device">אין מכשיר USB מחובר</string>
+    <string name="status_device_found">נמצא מכשיר USB</string>
+    <string name="status_adb_pending">חיבור ADB יתווסף בשלב הבא</string>
+    <string name="btn_refresh">רענן</string>
+    <string name="section_reboot">הפעלה מחדש</string>
+    <string name="btn_system">מערכת</string>
+    <string name="btn_recovery">Recovery</string>
+    <string name="btn_bootloader">Bootloader</string>
+    <string name="btn_fastboot">Fastboot</string>
+    <string name="section_shell">פקודת shell</string>
+    <string name="hint_shell">לדוגמה: getprop ro.product.model</string>
+    <string name="btn_run">הרץ</string>
+    <string name="confirm_title">לאשר פעולה?</string>
+    <string name="confirm_body">המכשיר יופעל מחדש. ודא שמכשיר היעד מחובר.</string>
+    <string name="btn_confirm">אישור</string>
+    <string name="btn_cancel">ביטול</string>
+    <string name="reboot_sent">הפקודה נשלחה</string>
+    <string name="err_not_connected">אין חיבור ADB פעיל. החיבור יתווסף בשלב הבא</string>
+</resources>
