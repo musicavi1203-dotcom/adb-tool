@@ -26,4 +26,22 @@
     <string name="err_no_adb_device">לא נמצא מכשיר ADB. ודא שכבל ה-OTG מחובר ושניפוי USB פעיל במכשיר היעד</string>
     <string name="err_permission">לא ניתנה הרשאת USB</string>
     <string name="err_adb">שגיאת ADB</string>
+    <string name="section_fastboot">Fastboot</string>
+    <string name="fb_disconnected">לא מחובר ל-fastboot. העבר את המכשיר למצב Bootloader ולחץ התחבר</string>
+    <string name="fb_connected_product">מחובר ל-fastboot (%1$s)</string>
+    <string name="fb_details">unlocked=%1$s · slot=%2$s</string>
+    <string name="fb_rebooting">המכשיר מופעל מחדש</string>
+    <string name="btn_fb_connect">התחבר ל-Fastboot</string>
+    <string name="btn_fb_disconnect">נתק</string>
+    <string name="btn_fb_reboot">הפעל מערכת מ-Fastboot</string>
+    <string name="label_partition">מחיצה (לדוגמה boot)</string>
+    <string name="label_slot">Slot</string>
+    <string name="slot_auto">אוטומטי</string>
+    <string name="btn_pick_file">בחר קובץ img</string>
+    <string name="btn_flash">צרוב</string>
+    <string name="flash_confirm_title">לצרוב מחיצה?</string>
+    <string name="flash_confirm_body">המחיצה %1$s תידרס בקובץ %2$s. לא ניתן לבטל אחרי שהצריבה מתחילה.</string>
+    <string name="flash_success">נצרב בהצלחה: %1$s</string>
+    <string name="err_no_fastboot_device">לא נמצא מכשיר fastboot. ודא שהמכשיר במצב Bootloader וכבל ה-OTG מחובר</string>
+    <string name="err_file_open">לא ניתן לפתוח את הקובץ</string>
 </resources>
