@@ -118,6 +118,17 @@ class FastbootController(private val context: Context) {
             }
         }
 
+    // פקודת fastboot חופשית, למשל "oem dump boot"
+    suspend fun runCommand(cmd: String, onLog: (String) -> Unit): Result<String> =
+        withContext(Dispatchers.IO) {
+            val t = transport ?: return@withContext Result.failure(notConnected())
+            try {
+                Result.success(t.runRaw(cmd, onLog))
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+
     // מדפיס את כל ה-getvar של המכשיר ללוג
     suspend fun getVarAll(onLog: (String) -> Unit): Result<Unit> = withContext(Dispatchers.IO) {
         val t = transport ?: return@withContext Result.failure(notConnected())
@@ -260,16 +271,24 @@ private class FastbootTransport(
         if (readFinal(LONG_TIMEOUT, onLog).code != "OKAY") throw IOException("ההורדה למכשיר נכשלה")
     }
 
+    // גודל המחיצה תמיד הקסדצימלי, גם בלי הקידומת 0x (המכשירים מחזירים "2000000" = 32MB)
     fun partitionSize(name: String): Long? {
-        val raw = getVar("partition-size:$name")
-        val m = Regex("0x([0-9a-fA-F]+)|(\\d+)").find(raw) ?: return null
-        return m.groupValues[1].takeIf { it.isNotEmpty() }?.toLong(16)
-            ?: m.groupValues[2].toLong()
+        val raw = getVar("partition-size:$name").trim()
+        val hex = raw.removePrefix("0x").removePrefix("0X")
+        return hex.takeIf { it.isNotEmpty() && it.all { c -> c.isLetterOrDigit() } }
+            ?.toLongOrNull(16)
     }
 
     fun getVarAll(onLog: (String) -> Unit) {
         write("getvar:all")
         readFinal(CMD_TIMEOUT, onLog)
+    }
+
+    // שולח פקודה חופשית ומחזיר את התשובה הסופית כמחרוזת
+    fun runRaw(cmd: String, onLog: (String) -> Unit): String {
+        write(cmd)
+        val r = readFinal(LONG_TIMEOUT, onLog)
+        return "${r.code} ${r.payload}".trim()
     }
 
     fun flash(partition: String, onLog: (String) -> Unit) {

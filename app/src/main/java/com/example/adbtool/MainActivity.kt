@@ -79,6 +79,7 @@ fun MainScreen() {
     var fbOutput by remember { mutableStateOf("") }
     var fbFlashCheck by remember { mutableStateOf<FlashCheck?>(null) }
     var fbPendingFlash by remember { mutableStateOf(false) }
+    var fbCmd by remember { mutableStateOf("") }
 
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         fbFileUri = uri
@@ -374,6 +375,31 @@ fun MainScreen() {
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(50)
             ) { Text(stringResource(R.string.btn_check)) }
+
+            OutlinedTextField(
+                value = fbCmd,
+                onValueChange = { fbCmd = it },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                singleLine = true,
+                label = { Text(stringResource(R.string.label_free_cmd)) }
+            )
+            Button(
+                onClick = {
+                    val cmd = fbCmd.trim()
+                    fbBusy = true
+                    fbOutput += "> $cmd\n"
+                    scope.launch {
+                        fastboot.runCommand(cmd, onLog = { line -> scope.launch { fbOutput += line + "\n" } })
+                            .onSuccess { fbOutput += it + "\n" }
+                            .onFailure { fbOutput += (it.message ?: "") + "\n" }
+                        fbBusy = false
+                    }
+                },
+                enabled = fbInfo != null && fbCmd.isNotBlank() && !fbBusy,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(50)
+            ) { Text(stringResource(R.string.btn_run)) }
         }
 
         // יומן ונתוני התקדמות משותפים לכל הכרטיסים

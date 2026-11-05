@@ -62,4 +62,5 @@
 קובץ %3$s (%4$s)
 לא ניתן לבטל אחרי שהצריבה מתחילה.</string>
     <string name="err_flash_too_big">הקובץ גדול מהמחיצה. הצריבה נחסמה.</string>
+    <string name="label_free_cmd">פקודה חופשית (לדוגמה oem dump boot)</string>
 </resources>
