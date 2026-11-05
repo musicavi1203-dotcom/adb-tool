@@ -173,6 +173,8 @@ private class AdbMessage(val cmd: Int, val arg0: Int, val arg1: Int, val data: B
 
 private class AdbSession(private val transport: UsbTransport) {
 
+    private var nextLocalId = 1
+
     fun handshake(keys: AdbKeys) {
         send(A_CNXN, ADB_VERSION, MAX_DATA, "host::\u0000".toByteArray())
         var msg = recv(TIMEOUT_NORMAL)
@@ -192,8 +194,10 @@ private class AdbSession(private val transport: UsbTransport) {
     fun shell(command: String): String = open("shell:$command")
 
     fun open(service: String): String {
-        send(A_OPEN, LOCAL_ID, 0, "$service\u0000".toByteArray())
-        var msg = recv(TIMEOUT_NORMAL)
+        // מזהה חדש לכל פקודה, כדי שאישורים ישנים לא יתערבבו
+        val localId = nextLocalId++
+        send(A_OPEN, localId, 0, "$service\u0000".toByteArray())
+        var msg = recvFor(localId, TIMEOUT_NORMAL)
         if (msg.cmd == A_CLSE) throw IOException("device refused $service")
         if (msg.cmd != A_OKAY) throw IOException("unexpected reply to OPEN")
         val remoteId = msg.arg0
@@ -201,17 +205,24 @@ private class AdbSession(private val transport: UsbTransport) {
         val out = ByteArrayOutputStream()
         var done = false
         while (!done) {
-            msg = recv(TIMEOUT_NORMAL)
+            msg = recvFor(localId, TIMEOUT_NORMAL)
             when (msg.cmd) {
                 A_WRTE -> {
                     out.write(msg.data)
-                    send(A_OKAY, LOCAL_ID, remoteId)
+                    send(A_OKAY, localId, remoteId)
                 }
                 A_CLSE -> done = true
             }
         }
-        runCatching { send(A_CLSE, LOCAL_ID, remoteId) }
+        runCatching { send(A_CLSE, localId, remoteId) }
         return String(out.toByteArray(), Charsets.UTF_8).trim()
+    }
+
+    // מדלג על הודעות שלא מיועדות למזהה הנוכחי
+    private fun recvFor(localId: Int, timeout: Int): AdbMessage {
+        var msg = recv(timeout)
+        while (msg.arg1 != localId) msg = recv(timeout)
+        return msg
     }
 
     fun close() = transport.close()
