@@ -1,0 +1,34 @@
+name: Unzip project
+
+on:
+  workflow_dispatch:
+    inputs:
+      zip_path:
+        description: 'שם קובץ ה-zip בשורש הריפו'
+        required: true
+        default: 'adb-tool.zip'
+
+permissions:
+  contents: write
+
+jobs:
+  unzip:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract zip and remove it
+        env:
+          ZIP_PATH: ${{ inputs.zip_path }}
+        run: |
+          unzip -o "$ZIP_PATH" -d .
+          rm -f "$ZIP_PATH"
+
+      - name: Commit extracted files
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Extract project from zip" || echo "no changes to commit"
+          git push
