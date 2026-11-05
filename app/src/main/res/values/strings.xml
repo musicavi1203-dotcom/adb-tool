@@ -44,4 +44,22 @@
     <string name="flash_success">נצרב בהצלחה: %1$s</string>
     <string name="err_no_fastboot_device">לא נמצא מכשיר fastboot. ודא שהמכשיר במצב Bootloader וכבל ה-OTG מחובר</string>
     <string name="err_file_open">לא ניתן לפתוח את הקובץ</string>
+    <string name="btn_fetch">שאב מחיצה</string>
+    <string name="fetch_choose_save">בחר מיקום שמירה</string>
+    <string name="fetch_success">נשאב בהצלחה: %1$d KB → %2$s</string>
+    <string name="err_fetch_save">לא ניתן לשמור את הקובץ</string>
+    <string name="err_fetch_unsupported">המכשיר לא תומך ב-fetch. נסה דגם אחר או Android 12+</string>
+    <string name="section_connection">חיבור ויעד</string>
+    <string name="section_fetch">שאיבה</string>
+    <string name="section_flash">צריבה</string>
+    <string name="section_check">בדיקה</string>
+    <string name="section_log">יומן</string>
+    <string name="fetch_hint">שואב את המחיצה שנבחרה מהמכשיר ושומר לקובץ שתבחר (זיכרון פנימי או כרטיס SD).</string>
+    <string name="flash_hint">צורב קובץ img למחיצה שנבחרה. הצריבה נחסמת אם הקובץ גדול מהמחיצה.</string>
+    <string name="check_hint">מדפיס את פרטי המכשיר וגודל המחיצה שנבחרה. לא משנה כלום במכשיר.</string>
+    <string name="btn_check">בדוק מידע מהמכשיר</string>
+    <string name="flash_check_body">מחיצה: %1$s (%2$s)
+קובץ %3$s (%4$s)
+לא ניתן לבטל אחרי שהצריבה מתחילה.</string>
+    <string name="err_flash_too_big">הקובץ גדול מהמחיצה. הצריבה נחסמה.</string>
 </resources>

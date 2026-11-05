@@ -77,11 +77,35 @@ fun MainScreen() {
     var fbFileName by remember { mutableStateOf<String?>(null) }
     var fbProgress by remember { mutableStateOf(-1) }
     var fbOutput by remember { mutableStateOf("") }
+    var fbFlashCheck by remember { mutableStateOf<FlashCheck?>(null) }
     var fbPendingFlash by remember { mutableStateOf(false) }
 
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         fbFileUri = uri
         fbFileName = uri?.lastPathSegment?.substringAfterLast('/')
+    }
+
+    // שמירת קובץ שנשאב
+    var fetchBytes by remember { mutableStateOf<ByteArray?>(null) }
+    val saveFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        val bytes = fetchBytes
+        if (uri != null && bytes != null) {
+            scope.launch {
+                try {
+                    ctx.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+                    val name = uri.lastPathSegment?.substringAfterLast('/') ?: "boot.img"
+                    fbOutput += ctx.getString(R.string.fetch_success, bytes.size / 1024, name) + "\n"
+                } catch (e: Exception) {
+                    fbOutput += ctx.getString(R.string.err_fetch_save) + ": ${e.message}\n"
+                } finally {
+                    fetchBytes = null
+                    fbBusy = false
+                }
+            }
+        } else {
+            fetchBytes = null
+            fbBusy = false
+        }
     }
 
     val rebootButtons = listOf(
@@ -183,124 +207,190 @@ fun MainScreen() {
             }
         }
 
-        // ───── כרטיס Fastboot ─────
+        // ───── Fastboot ─────
         Text(stringResource(R.string.section_fastboot), style = MaterialTheme.typography.titleMedium)
-        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
-            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+
+        // כרטיס 1: חיבור ויעד
+        FbCard(title = stringResource(R.string.section_connection)) {
+            Text(
+                text = fbStatus ?: stringResource(R.string.fb_disconnected),
+                style = MaterialTheme.typography.bodyMedium
+            )
+            fbInfo?.let { i ->
                 Text(
-                    text = fbStatus ?: stringResource(R.string.fb_disconnected),
-                    style = MaterialTheme.typography.bodyMedium
+                    text = stringResource(R.string.fb_details, i.unlocked, i.slot),
+                    style = MaterialTheme.typography.bodySmall
                 )
-                fbInfo?.let { i ->
-                    Text(
-                        text = stringResource(R.string.fb_details, i.unlocked, i.slot),
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
+            }
 
-                OutlinedButton(
-                    onClick = {
-                        fbBusy = true
-                        scope.launch {
-                            if (fbInfo != null) {
-                                fastboot.disconnect()
-                                fbInfo = null
-                                fbStatus = null
-                            } else {
-                                fastboot.connect()
-                                    .onSuccess { i ->
-                                        fbInfo = i
-                                        fbStatus = ctx.getString(R.string.fb_connected_product, i.product)
-                                    }
-                                    .onFailure { fbInfo = null; fbStatus = it.message }
-                            }
-                            fbBusy = false
-                        }
-                    },
-                    enabled = !fbBusy,
-                    shape = RoundedCornerShape(50)
-                ) {
-                    Text(
-                        if (fbInfo != null) stringResource(R.string.btn_fb_disconnect)
-                        else stringResource(R.string.btn_fb_connect)
-                    )
-                }
-
-                OutlinedTextField(
-                    value = fbPartition,
-                    onValueChange = { fbPartition = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(24.dp),
-                    singleLine = true,
-                    label = { Text(stringResource(R.string.label_partition)) }
-                )
-
-                Text(stringResource(R.string.label_slot), style = MaterialTheme.typography.bodySmall)
-                val slots = SlotChoice.entries
-                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                    slots.forEachIndexed { index, choice ->
-                        SegmentedButton(
-                            selected = fbSlot == choice,
-                            onClick = { fbSlot = choice },
-                            shape = SegmentedButtonDefaults.itemShape(index = index, count = slots.size)
-                        ) {
-                            Text(
-                                when (choice) {
-                                    SlotChoice.AUTO -> stringResource(R.string.slot_auto)
-                                    SlotChoice.A -> "a"
-                                    SlotChoice.B -> "b"
+            OutlinedButton(
+                onClick = {
+                    fbBusy = true
+                    scope.launch {
+                        if (fbInfo != null) {
+                            fastboot.disconnect()
+                            fbInfo = null
+                            fbStatus = null
+                        } else {
+                            fastboot.connect()
+                                .onSuccess { i ->
+                                    fbInfo = i
+                                    fbStatus = ctx.getString(R.string.fb_connected_product, i.product)
                                 }
-                            )
+                                .onFailure { fbInfo = null; fbStatus = it.message }
                         }
+                        fbBusy = false
+                    }
+                },
+                enabled = !fbBusy,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(50)
+            ) {
+                Text(
+                    if (fbInfo != null) stringResource(R.string.btn_fb_disconnect)
+                    else stringResource(R.string.btn_fb_connect)
+                )
+            }
+
+            OutlinedTextField(
+                value = fbPartition,
+                onValueChange = { fbPartition = it },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                singleLine = true,
+                label = { Text(stringResource(R.string.label_partition)) }
+            )
+
+            Text(stringResource(R.string.label_slot), style = MaterialTheme.typography.bodySmall)
+            val slots = SlotChoice.entries
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                slots.forEachIndexed { index, choice ->
+                    SegmentedButton(
+                        selected = fbSlot == choice,
+                        onClick = { fbSlot = choice },
+                        shape = SegmentedButtonDefaults.itemShape(index = index, count = slots.size)
+                    ) {
+                        Text(
+                            when (choice) {
+                                SlotChoice.AUTO -> stringResource(R.string.slot_auto)
+                                SlotChoice.A -> "a"
+                                SlotChoice.B -> "b"
+                            }
+                        )
                     }
                 }
+            }
 
-                OutlinedButton(
-                    onClick = { filePicker.launch("*/*") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(50)
-                ) {
-                    Text(fbFileName ?: stringResource(R.string.btn_pick_file))
-                }
+            OutlinedButton(
+                onClick = {
+                    fbBusy = true
+                    scope.launch {
+                        fastboot.reboot()
+                        fbInfo = null
+                        fbStatus = ctx.getString(R.string.fb_rebooting)
+                        fbBusy = false
+                    }
+                },
+                enabled = fbInfo != null && !fbBusy,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(50)
+            ) { Text(stringResource(R.string.btn_fb_reboot)) }
+        }
 
-                Button(
-                    onClick = { fbPendingFlash = true },
-                    enabled = fbInfo != null && fbFileUri != null && fbPartition.isNotBlank() && !fbBusy,
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                    shape = RoundedCornerShape(50),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) { Text(stringResource(R.string.btn_flash)) }
-
-                OutlinedButton(
-                    onClick = {
-                        fbBusy = true
-                        scope.launch {
-                            fastboot.reboot()
-                            fbInfo = null
-                            fbStatus = ctx.getString(R.string.fb_rebooting)
+        // כרטיס 2: שאיבה
+        FbCard(title = stringResource(R.string.section_fetch), hint = stringResource(R.string.fetch_hint)) {
+            Button(
+                onClick = {
+                    fbBusy = true
+                    fbProgress = 0
+                    fbOutput = ""
+                    scope.launch {
+                        fastboot.fetchPartition(
+                            baseName = fbPartition,
+                            slot = fbSlot,
+                            onProgress = { p -> scope.launch { fbProgress = p } },
+                            onLog = { line -> scope.launch { fbOutput += line + "\n" } }
+                        ).onSuccess { bytes ->
+                            fetchBytes = bytes
+                            saveFileLauncher.launch("${fbPartition}.img")
+                        }.onFailure { e ->
+                            val msg = e.message ?: ""
+                            fbOutput += (if (msg.contains("fetch")) ctx.getString(R.string.err_fetch_unsupported) else msg) + "\n"
+                            fbProgress = -1
                             fbBusy = false
                         }
-                    },
-                    enabled = fbInfo != null && !fbBusy,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(50)
-                ) { Text(stringResource(R.string.btn_fb_reboot)) }
+                    }
+                },
+                enabled = fbInfo != null && fbPartition.isNotBlank() && !fbBusy,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(50)
+            ) { Text(stringResource(R.string.btn_fetch)) }
+        }
 
-                if (fbProgress in 0..100) {
-                    LinearProgressIndicator(
-                        progress = { fbProgress / 100f },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Text("$fbProgress%", style = MaterialTheme.typography.bodySmall)
-                }
+        // כרטיס 3: צריבה
+        FbCard(title = stringResource(R.string.section_flash), hint = stringResource(R.string.flash_hint)) {
+            OutlinedButton(
+                onClick = { filePicker.launch("*/*") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(50)
+            ) {
+                Text(fbFileName ?: stringResource(R.string.btn_pick_file))
+            }
 
-                if (fbOutput.isNotEmpty()) {
-                    Text(
-                        text = fbOutput,
-                        fontFamily = FontFamily.Monospace,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
+            Button(
+                onClick = {
+                    val uri = fbFileUri ?: return@Button
+                    fbBusy = true
+                    scope.launch {
+                        fastboot.checkFlash(fbPartition, fbSlot, uri)
+                            .onSuccess { fbFlashCheck = it; fbPendingFlash = true }
+                            .onFailure { fbOutput += (it.message ?: "") + "\n" }
+                        fbBusy = false
+                    }
+                },
+                enabled = fbInfo != null && fbFileUri != null && fbPartition.isNotBlank() && !fbBusy,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(50),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+            ) { Text(stringResource(R.string.btn_flash)) }
+        }
+
+        // כרטיס 4: בדיקה
+        FbCard(title = stringResource(R.string.section_check), hint = stringResource(R.string.check_hint)) {
+            OutlinedButton(
+                onClick = {
+                    fbBusy = true
+                    fbOutput = ""
+                    scope.launch {
+                        fastboot.getVarAll(onLog = { line -> scope.launch { fbOutput += line + "\n" } })
+                            .onFailure { fbOutput += (it.message ?: "") + "\n" }
+                        fastboot.partitionInfo(fbPartition, fbSlot)
+                            .onSuccess { (target, size) -> fbOutput += "מחיצה $target: ${fmtMb(size)}\n" }
+                            .onFailure { fbOutput += (it.message ?: "") + "\n" }
+                        fbBusy = false
+                    }
+                },
+                enabled = fbInfo != null && !fbBusy,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(50)
+            ) { Text(stringResource(R.string.btn_check)) }
+        }
+
+        // יומן ונתוני התקדמות משותפים לכל הכרטיסים
+        if (fbProgress in 0..100) {
+            LinearProgressIndicator(
+                progress = { fbProgress / 100f },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text("$fbProgress%", style = MaterialTheme.typography.bodySmall)
+        }
+        if (fbOutput.isNotEmpty()) {
+            FbCard(title = stringResource(R.string.section_log)) {
+                Text(
+                    text = fbOutput,
+                    fontFamily = FontFamily.Monospace,
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
         }
     }
@@ -328,34 +418,57 @@ fun MainScreen() {
         )
     }
 
-    // דיאלוג אישור צריבה
+    // דיאלוג אישור צריבה: מציג מחיצה וגודלים, וחוסם אם הקובץ גדול מהמחיצה
+    val check = fbFlashCheck
     val flashUri = fbFileUri
-    if (fbPendingFlash && flashUri != null) {
+    if (fbPendingFlash && check != null && flashUri != null) {
+        val tooBig = check.partitionSize != null && check.fileSize > check.partitionSize
         AlertDialog(
             onDismissRequest = { fbPendingFlash = false },
             shape = RoundedCornerShape(28.dp),
             title = { Text(stringResource(R.string.flash_confirm_title)) },
-            text = { Text(stringResource(R.string.flash_confirm_body, fbPartition, fbFileName ?: "")) },
-            confirmButton = {
-                TextButton(onClick = {
-                    fbPendingFlash = false
-                    fbBusy = true
-                    fbProgress = 0
-                    fbOutput = ""
-                    scope.launch {
-                        fastboot.flash(
-                            baseName = fbPartition,
-                            slot = fbSlot,
-                            fileUri = flashUri,
-                            onProgress = { p -> scope.launch { fbProgress = p } },
-                            onLog = { line -> scope.launch { fbOutput += line + "\n" } }
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        stringResource(
+                            R.string.flash_check_body,
+                            check.target,
+                            fmtMb(check.partitionSize),
+                            fbFileName ?: "",
+                            fmtMb(check.fileSize)
                         )
-                            .onSuccess { target -> fbOutput += ctx.getString(R.string.flash_success, target) + "\n" }
-                            .onFailure { fbOutput += (it.message ?: "") + "\n" }
-                        fbProgress = -1
-                        fbBusy = false
+                    )
+                    if (tooBig) {
+                        Text(
+                            stringResource(R.string.err_flash_too_big),
+                            color = MaterialTheme.colorScheme.error
+                        )
                     }
-                }) { Text(stringResource(R.string.btn_confirm)) }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !tooBig,
+                    onClick = {
+                        fbPendingFlash = false
+                        fbBusy = true
+                        fbProgress = 0
+                        fbOutput = ""
+                        scope.launch {
+                            fastboot.flash(
+                                baseName = fbPartition,
+                                slot = fbSlot,
+                                fileUri = flashUri,
+                                onProgress = { p -> scope.launch { fbProgress = p } },
+                                onLog = { line -> scope.launch { fbOutput += line + "\n" } }
+                            )
+                                .onSuccess { target -> fbOutput += ctx.getString(R.string.flash_success, target) + "\n" }
+                                .onFailure { fbOutput += (it.message ?: "") + "\n" }
+                            fbProgress = -1
+                            fbBusy = false
+                        }
+                    }
+                ) { Text(stringResource(R.string.btn_confirm)) }
             },
             dismissButton = {
                 TextButton(onClick = { fbPendingFlash = false }) { Text(stringResource(R.string.btn_cancel)) }
@@ -363,6 +476,25 @@ fun MainScreen() {
         )
     }
 }
+
+@Composable
+private fun FbCard(title: String, hint: String? = null, content: @Composable ColumnScope.() -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(text = title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            if (hint != null) {
+                Text(text = hint, style = MaterialTheme.typography.bodySmall)
+            }
+            content()
+        }
+    }
+}
+
+private fun fmtMb(bytes: Long?): String =
+    if (bytes == null) "לא ידוע" else "%.1f MB".format(bytes / 1048576.0)
 
 @Composable
 private fun InfoLine(label: String, value: String) {

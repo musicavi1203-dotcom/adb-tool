@@ -29,6 +29,9 @@ enum class SlotChoice { AUTO, A, B }
 
 data class FastbootInfo(val product: String, val unlocked: String, val slot: String)
 
+// תוצאת בדיקה לפני צריבה: שם המחיצה, גודלה במכשיר (null אם לא ידוע) וגודל הקובץ
+data class FlashCheck(val target: String, val partitionSize: Long?, val fileSize: Long)
+
 private class FbResponse(val code: String, val payload: String)
 
 class FastbootController(private val context: Context) {
@@ -80,6 +83,65 @@ class FastbootController(private val context: Context) {
             t.download(bytes, onProgress, onLog)
             t.flash(target, onLog)
             Result.success(target)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // בודק את שם המחיצה בפועל וגודלה במכשיר, בלי לשנות כלום
+    suspend fun partitionInfo(baseName: String, slot: SlotChoice): Result<Pair<String, Long?>> =
+        withContext(Dispatchers.IO) {
+            val t = transport ?: return@withContext Result.failure(notConnected())
+            try {
+                val target = t.resolvePartition(baseName, slot)
+                Result.success(target to t.partitionSize(target))
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+
+    // מסיים לפני צריבה: שם מחיצה, גודל מחיצה וגודל הקובץ שנבחר
+    suspend fun checkFlash(baseName: String, slot: SlotChoice, fileUri: Uri): Result<FlashCheck> =
+        withContext(Dispatchers.IO) {
+            val t = transport ?: return@withContext Result.failure(notConnected())
+            try {
+                val target = t.resolvePartition(baseName, slot)
+                val fd = context.contentResolver.openAssetFileDescriptor(fileUri, "r")
+                val known = fd?.use { it.length } ?: -1L
+                val fileSize = if (known >= 0) known else {
+                    context.contentResolver.openInputStream(fileUri)?.use { it.readBytes().size.toLong() }
+                        ?: throw IOException(context.getString(R.string.err_file_open))
+                }
+                Result.success(FlashCheck(target, t.partitionSize(target), fileSize))
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+
+    // מדפיס את כל ה-getvar של המכשיר ללוג
+    suspend fun getVarAll(onLog: (String) -> Unit): Result<Unit> = withContext(Dispatchers.IO) {
+        val t = transport ?: return@withContext Result.failure(notConnected())
+        try {
+            t.getVarAll(onLog)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // שואב מחיצה מהמכשיר ומחזיר את הבתים
+    suspend fun fetchPartition(
+        baseName: String,
+        slot: SlotChoice,
+        onProgress: (Int) -> Unit,
+        onLog: (String) -> Unit
+    ): Result<ByteArray> = withContext(Dispatchers.IO) {
+        val t = transport ?: return@withContext Result.failure(notConnected())
+        try {
+            val target = t.resolvePartition(baseName, slot)
+            onLog("שואב $target...")
+            val bytes = t.fetch(target, onProgress, onLog)
+            Result.success(bytes)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -198,9 +260,42 @@ private class FastbootTransport(
         if (readFinal(LONG_TIMEOUT, onLog).code != "OKAY") throw IOException("ההורדה למכשיר נכשלה")
     }
 
+    fun partitionSize(name: String): Long? {
+        val raw = getVar("partition-size:$name")
+        val m = Regex("0x([0-9a-fA-F]+)|(\\d+)").find(raw) ?: return null
+        return m.groupValues[1].takeIf { it.isNotEmpty() }?.toLong(16)
+            ?: m.groupValues[2].toLong()
+    }
+
+    fun getVarAll(onLog: (String) -> Unit) {
+        write("getvar:all")
+        readFinal(CMD_TIMEOUT, onLog)
+    }
+
     fun flash(partition: String, onLog: (String) -> Unit) {
         write("flash:$partition")
         if (readFinal(LONG_TIMEOUT, onLog).code != "OKAY") throw IOException("הצריבה של $partition נכשלה")
+    }
+
+    // שואב מחיצה מהמכשיר דרך פקודת fetch (נתמך ב-Android 12+)
+    fun fetch(partition: String, onProgress: (Int) -> Unit, onLog: (String) -> Unit): ByteArray {
+        write("fetch:$partition")
+        val r = readFinal(CMD_TIMEOUT, onLog)
+        if (r.code != "DATA") throw IOException("המכשיר לא תומך ב-fetch או דחה את הבקשה: ${r.payload}")
+        val size = r.payload.trim().toLong(16).toInt()
+        onLog("גודל מחיצה: ${size / 1024}KB")
+        val buf = ByteArray(size)
+        var offset = 0
+        val chunk = ByteArray(CHUNK_SIZE)
+        while (offset < size) {
+            val n = conn.bulkTransfer(epIn, chunk, minOf(CHUNK_SIZE, size - offset), LONG_TIMEOUT)
+            if (n < 0) throw IOException("קריאה מ-USB נכשלה בבייט $offset")
+            System.arraycopy(chunk, 0, buf, offset, n)
+            offset += n
+            onProgress(offset * 100 / size)
+        }
+        if (readFinal(CMD_TIMEOUT, onLog).code != "OKAY") throw IOException("fetch נכשל בסיום")
+        return buf
     }
 
     // קורא עד תשובה סופית. INFO מועבר ללוג, FAIL הופך לחריגה
